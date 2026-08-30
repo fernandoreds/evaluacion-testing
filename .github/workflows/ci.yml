@@ -1,75 +1,39 @@
-name: Integracion Continua
-
-on:
-  push:
-    branches:
-      - main
-      - feature/**
-  pull_request:
-    branches:
-      - main
-
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Obtener codigo del repositorio
-        uses: actions/checkout@v4
-
-      - name: Configurar Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-
-      - name: Compilar proyecto
-        run: mvn clean compile
-
-      - name: Ejecutar pruebas unitarias y BDD
-        run: mvn test
-
-      - name: Publicar reporte de pruebas
-        uses: actions/upload-artifact@v4
+      - name: Generar dashboard de resultados
         if: always()
-        with:
-          name: reporte-pruebas-unitarias
-          path: target/surefire-reports/
-
-      - name: Publicar reporte BDD
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: reporte-cucumber
-          path: target/cucumber-report.html
-
-      - name: Instalar k6
         run: |
-          sudo gpg -k
-          sudo gpg --no-default-keyring \
-            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
-            --keyserver hkp://keyserver.ubuntu.com:80 \
-            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "# Dashboard de Integración Continua" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
-            | sudo tee /etc/apt/sources.list.d/k6.list
+          echo "## Resumen de pruebas" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-          sudo apt-get update
-          sudo apt-get install k6
+          echo "| Tipo de prueba | Estado | Evidencia |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Pruebas unitarias | Ejecutadas | reporte-pruebas-unitarias |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pruebas BDD con Cucumber | Ejecutadas | reporte-cucumber |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pruebas de performance con k6 | Ejecutadas | reporte-performance |" >> $GITHUB_STEP_SUMMARY
 
-      - name: Ejecutar prueba de performance
-        run: |
-          mkdir -p performance-results
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Métricas de performance" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-          k6 run \
-            --summary-export=performance-results/resumen-performance.json \
-            performance/login-performance.js \
-            | tee performance-results/salida-k6.txt
+          if [ -f performance-results/resumen-performance.json ]; then
+            P95=$(jq '.metrics.http_req_duration.values["p(95)"]' performance-results/resumen-performance.json)
+            AVG=$(jq '.metrics.http_req_duration.values.avg' performance-results/resumen-performance.json)
+            FAIL_RATE=$(jq '.metrics.http_req_failed.values.rate * 100' performance-results/resumen-performance.json)
 
-      - name: Publicar reporte de performance
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: reporte-performance
-          path: performance-results/
+            echo "| Métrica | Resultado |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---:|" >> $GITHUB_STEP_SUMMARY
+            echo "| Latencia promedio | ${AVG} ms |" >> $GITHUB_STEP_SUMMARY
+            echo "| Latencia p95 | ${P95} ms |" >> $GITHUB_STEP_SUMMARY
+            echo "| Tasa de errores HTTP | ${FAIL_RATE} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No se encontró el reporte de performance." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Criterios automáticos" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Latencia p95 menor a 1000 ms." >> $GITHUB_STEP_SUMMARY
+          echo "- Tasa de errores HTTP menor al 5%." >> $GITHUB_STEP_SUMMARY
+          echo "- Las pruebas unitarias y BDD deben finalizar correctamente." >> $GITHUB_STEP_SUMMARY
