@@ -60,6 +60,7 @@ jobs:
 
       - name: Ejecutar prueba de performance
         run: |
+          set -o pipefail
           mkdir -p performance-results
 
           k6 run \
